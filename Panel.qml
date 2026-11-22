@@ -589,7 +589,6 @@ Panel {
                   swatch: Commons.Color.accent
                   name: root.t("llmModels")
                   amount: root.gib(root.stats.llm_vram) + " GiB"
-                  note: root.t("shownInBar")
                 }
                 // The two buffers that fill while you work: the context (whole conversation)
                 // and the reply being generated. Memory is the KV cache those tokens occupy.
@@ -631,11 +630,6 @@ Panel {
                   note: (root.stats.other_apps || []).length
                     ? (root.stats.other_apps || []).map(function(app) { return app.name + " " + root.gib(app.vram) }).join(" · ")
                     : ""
-                }
-                LegendRow {
-                  outlined: true
-                  name: root.t("free")
-                  amount: root.gib(Math.max(0, (root.gpu.vram_total || 0) - (root.gpu.vram_used || 0))) + " GiB"
                 }
               }
 
