@@ -14,7 +14,7 @@ LLM Monitor is a small Omarchy bar widget for people who run local models with *
   - **Output buffer:** tokens of the reply being generated against its limit (`max_tokens` or the model's `n-predict`), with the memory they occupy. The last reply stays visible after it ends.
   - **GPU activity:** load, temperature and power, plus the **generation speed** of the loaded model: live tokens per second while it writes, and min / avg / max over the replies since the monitor started watching (llama.cpp with `--metrics`, vLLM). The average is weighted by tokens.
   - **System:** CPU and RAM.
-  - **Runtimes:** llama.cpp, Ollama, LM Studio and vLLM, each with state (not installed / stopped / running / model loaded / model sleeping), model name, context fill, VRAM, CPU, RAM and the programs currently connected (e.g. pi, Simple Recipes).
+  - **Runtimes:** llama.cpp, Ollama, LM Studio and vLLM, each with state (stopped / running / model loaded / model sleeping), model name, context fill, VRAM, CPU, RAM and the programs currently connected (e.g. pi, Simple Recipes).
   - **Free GPU memory** button and a **btop** shortcut.
 - **Right click:** opens btop.
 
@@ -62,7 +62,7 @@ A collector (`scripts/llm-monitor.py`) runs while the widget is loaded and strea
 - **GPU memory per runtime** comes from DRM `fdinfo` (`drm-resident-vram`), so only memory that is really in VRAM is counted; requested-but-evicted memory is reported separately.
 - **Context and output buffers.** llama.cpp: tokens from `/slots`, with the context counted once when the slots share a unified KV cache (llama.cpp's default when the number of slots is automatic) and added up when each slot has its own part; the KV-cache size is projected once per model load with `llama-fit-params` from the same llama.cpp build (CPU only, nothing is loaded onto the GPU; only when util-linux `setpriv` is installed: it runs under `setpriv --pdeathsig KILL`, so it ends with the collector, and stopped by the collector when the widget unloads). vLLM: KV-cache fill from `/metrics` (`kv_cache_usage_perc`, pool size from `cache_config_info`); vLLM does not report a per-reply output limit, so it has no output-buffer row. Ollama and LM Studio report only the configured context size.
 - **Replies are checked, not trusted.** Whatever answers on a runtime's port is size- and time-limited; numbers have to be finite and in range (a reply with `NaN`, `Infinity` or an overflowing `1e999` counts as no reply), so every snapshot stays valid JSON.
-- **Installed or not** is checked about once a minute (command on `PATH`, systemd unit, LM Studio's `~/.lmstudio`, or the `vllm` Python package), so a runtime you never installed shows *not installed* instead of *stopped*.
+- **Installed or not** is checked about once a minute (command on `PATH`, systemd unit, LM Studio's `~/.lmstudio`, or the `vllm` Python package), so a runtime you never installed is left out of the panel.
 
 ### Free GPU memory (the only action that changes runtime state)
 

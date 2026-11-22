@@ -1140,7 +1140,7 @@ _installed = {"tick": 0, "found": {}}
 def installed_runtimes(every=30):
     """Which runtimes exist on this machine, refreshed every `every` snapshots (about a minute).
 
-    Lets the panel say "not installed" instead of "stopped". A runtime counts as
+    Lets the panel leave out runtimes that are not installed. A runtime counts as
     installed when its command is on PATH, a systemd unit for it exists, its data
     folder exists, or (vLLM) the Python package is importable.
     """

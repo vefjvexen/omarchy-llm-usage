@@ -21,7 +21,7 @@ Panel {
   property var stats: ({})  // pushed by BarWidget on every snapshot
   readonly property var gpu: stats.gpu || ({})
   readonly property var system: stats.system || ({})
-  readonly property var runtimes: stats.runtimes || []
+  readonly property var runtimes: (stats.runtimes || []).filter(function(r) { return r.installed !== false })
   readonly property color fg: Commons.Color.popups.text
   readonly property color dim: Qt.darker(fg, 1.45)
   readonly property string font: root.bar ? root.bar.fontFamily : Style.font.family
@@ -47,7 +47,7 @@ Panel {
     return bytes >= 1073741824 ? root.gib(bytes) + " GiB" : Math.round(bytes / 1048576) + " MiB"
   }
   function runtimeState(runtime) {
-    if (!runtime.running) return runtime.installed === false ? t("notInstalled") : t("stopped")
+    if (!runtime.running) return t("stopped")
     var resident = runtime.models.filter(function(model) { return model.state !== "sleeping" }).length
     if (resident) return tn("modelsLoaded", resident)
     if (runtime.models.length) return t("modelSleeping")
@@ -681,7 +681,7 @@ Panel {
               PanelSeparator { width: parent.width; foreground: root.fg }
               PanelSectionHeader { text: root.t("runtimes").toUpperCase(); foreground: root.fg; fontFamily: root.font }
 
-              Repeater {
+		  Repeater {
                 model: root.runtimes
                 delegate: Column {
                   id: block

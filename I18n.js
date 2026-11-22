@@ -124,7 +124,6 @@ var STRINGS = {
       "minMax": "min {0}, max {1}",
       "generatingDot": "Generating · ",
       "ctx": "{0} ctx",
-      "notInstalled": "not installed",
       "stopped": "stopped",
       "modelsLoaded": [
           "1 model loaded",
@@ -214,7 +213,6 @@ var STRINGS = {
       "minMax": "min {0}, max {1}",
       "generatingDot": "Generiert · ",
       "ctx": "{0} Ktx",
-      "notInstalled": "nicht installiert",
       "stopped": "gestoppt",
       "modelsLoaded": [
           "1 Modell geladen",
@@ -304,7 +302,6 @@ var STRINGS = {
       "minMax": "min {0}, max {1}",
       "generatingDot": "Génération · ",
       "ctx": "{0} ctx",
-      "notInstalled": "non installé",
       "stopped": "arrêté",
       "modelsLoaded": [
           "1 modèle chargé",
@@ -394,7 +391,6 @@ var STRINGS = {
       "minMax": "mín. {0}, máx. {1}",
       "generatingDot": "Generando · ",
       "ctx": "{0} ctx",
-      "notInstalled": "no instalado",
       "stopped": "detenido",
       "modelsLoaded": [
           "1 modelo cargado",
@@ -484,7 +480,6 @@ var STRINGS = {
       "minMax": "min {0}, max {1}",
       "generatingDot": "In generazione · ",
       "ctx": "{0} ctx",
-      "notInstalled": "non installato",
       "stopped": "fermo",
       "modelsLoaded": [
           "1 modello caricato",
@@ -574,7 +569,6 @@ var STRINGS = {
       "minMax": "mín. {0}, máx. {1}",
       "generatingDot": "Gerando · ",
       "ctx": "{0} ctx",
-      "notInstalled": "não instalado",
       "stopped": "parado",
       "modelsLoaded": [
           "1 modelo carregado",
@@ -664,7 +658,6 @@ var STRINGS = {
       "minMax": "min {0}, max {1}",
       "generatingDot": "Genereert · ",
       "ctx": "{0} ctx",
-      "notInstalled": "niet geïnstalleerd",
       "stopped": "gestopt",
       "modelsLoaded": [
           "1 model geladen",
@@ -754,7 +747,6 @@ var STRINGS = {
       "minMax": "min {0}, maks. {1}",
       "generatingDot": "Generuje · ",
       "ctx": "{0} ktx",
-      "notInstalled": "nie zainstalowano",
       "stopped": "zatrzymany",
       "modelsLoaded": [
           "1 model załadowany",
