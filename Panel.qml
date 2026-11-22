@@ -135,7 +135,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(400))
+    contentWidth: panel.fittedContentWidth(Style.space(380))
     // At least as tall as the screenshot note overlay while it shows.
     contentHeight: panel.fittedContentHeight(Math.max(column.implicitHeight, shot.neededHeight))
 
