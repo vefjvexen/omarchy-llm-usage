@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -8,8 +9,8 @@ import qs.Ui as Ui
 import "I18n.js" as I18n
 import "corners.js" as Corners
 
-// Bar indicator for local LLMs. Dim chip while nothing is loaded; accent chip
-// plus resident GPU memory while a runtime holds a model; the chip pulses
+// Bar indicator for local LLMs. Dim runtime logo while nothing is loaded; accent
+// logo plus resident GPU memory while a runtime holds a model; the logo pulses
 // while the GPU is generating. Left click opens the detail panel.
 Ui.BarWidget {
   id: root
@@ -93,12 +94,35 @@ Ui.BarWidget {
   function setCorners(code) { saveSetting("corners", Corners.choice(code), "windows") }
   function setScreenshotKey(on) { saveSetting("screenshotKey", on === true, true) }
 
+  // Numbers beside the logo; none while nothing is loaded.
   readonly property string barText: {
-    if (!active) return "󰘚"
+    if (!active) return ""
     // "!" marks model memory that was evicted from VRAM (overcommitted GPU).
-    return "󰘚 " + gib(stats.llm_vram) + "G" + ((stats.llm_spilled || 0) > 268435456 ? "!" : "")
+    return gib(stats.llm_vram) + "G" + ((stats.llm_spilled || 0) > 268435456 ? "!" : "")
       + (contextFraction >= 0 ? " " + Math.round(contextFraction * 100) + "%" : "")
   }
+
+  // White silhouettes in assets/, tinted to the theme where they are drawn.
+  readonly property var runtimeLogos: ({
+    llamacpp: "llama-cpp.png", ollama: "ollama.png",
+    lmstudio: "lm-studio.png", vllm: "vllm.png"
+  })
+  // The runtime whose logo is shown: the one holding the model the panel reports,
+  // else the first one running, else the first one installed, else llama.cpp
+  // (the collector lists runtimes as llama.cpp, Ollama, LM Studio, vLLM).
+  readonly property string logoRuntime: {
+    var list = stats.runtimes || []
+    var primary = stats.primary
+    function first(test) {
+      for (var i = 0; i < list.length; i++) if (test(list[i])) return list[i].id
+      return ""
+    }
+    return (primary ? first(function(r) { return r.name === primary.runtime }) : "")
+      || first(function(r) { return r.running === true })
+      || first(function(r) { return r.installed !== false })
+      || "llamacpp"
+  }
+  readonly property url logoSource: Qt.resolvedUrl("assets/" + (runtimeLogos[logoRuntime] || runtimeLogos.llamacpp))
   readonly property string summary: {
     var gpu = stats.gpu || {}
     var vram = t("tipBarShows", [gib(stats.llm_vram)]) + "\n"
@@ -166,7 +190,7 @@ Ui.BarWidget {
     onLoaded: { root.injectPanel(); Qt.callLater(root.injectPanel) }
   }
 
-  // 0..1 glow while generating; drives the chip colour.
+  // 0..1 glow while generating; drives the logo colour.
   property real glow: 0
   SequentialAnimation on glow {
     running: root.busy
@@ -180,7 +204,15 @@ Ui.BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.barText
+    // Logo and numbers are drawn by barContent below, so the button's own label stays off.
+    text: ""
+    labelVisible: false
+    hasVisualContent: true
+    // Sized like a bar icon while only the logo shows; wider once the numbers join it.
+    // A vertical bar has no room for the numbers, so it keeps the logo alone.
+    fixedWidth: button.vertical ? -1
+      : (barLabel.visible ? Math.ceil(barContent.implicitWidth + button.scaledHorizontalMargin * 2) : Style.bar.iconSlot)
+    fixedHeight: button.vertical ? Style.bar.iconSlot : -1
     dimmed: !root.active
     readonly property color base: root.bar ? root.bar.barForeground : Commons.Color.foreground
     foreground: root.active ? Qt.tint(root.contextColor, Qt.rgba(base.r, base.g, base.b, root.glow * 0.75)) : base
@@ -190,7 +222,65 @@ Ui.BarWidget {
       else if (code === Qt.RightButton && root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
     }
 
-    // Context fill under the chip: grows with the tokens in use, coloured by level.
+    Row {
+      id: barContent
+      anchors.centerIn: parent
+      spacing: Style.space(5)
+      scale: button.pressScale
+
+      Item {
+        anchors.verticalCenter: parent.verticalCenter
+        // Logo size in the bar: the full icon slot, as in the old mod (larger than a glyph's canvas).
+        width: Style.bar.iconSlot
+        height: Style.bar.iconSlot
+        Image {
+          id: barLogo
+          anchors.fill: parent
+          source: root.logoSource
+          fillMode: Image.PreserveAspectFit
+          sourceSize.width: Math.round(width * Screen.devicePixelRatio)
+          sourceSize.height: Math.round(height * Screen.devicePixelRatio)
+          smooth: true
+          mipmap: true
+          // Hidden, kept as a texture for the mask below.
+          visible: false
+          layer.enabled: true
+        }
+        // The button's colour painted through the logo's shape, as the tray does
+        // for symbolic icons, so the logo follows the theme and the context level.
+        Rectangle {
+          anchors.fill: parent
+          color: button.foreground
+          layer.enabled: true
+          layer.effect: MultiEffect {
+            maskEnabled: true
+            maskSource: barLogo
+            maskThresholdMin: 0.5
+            maskSpreadAtMin: 1.0
+          }
+        }
+      }
+
+      Text {
+        id: barLabel
+        visible: root.barText !== "" && !button.vertical
+        anchors.verticalCenter: parent.verticalCenter
+        // Centre the figures rather than the line box, as the bar's own labels do.
+        anchors.verticalCenterOffset: (barMetrics.descent - barMetrics.ascent + barMetrics.tightBoundingRect("0").height) / 2
+        textFormat: Text.PlainText
+        text: root.barText
+        color: button.foreground
+        font.family: button.fontFamily
+        font.pixelSize: button.fontSize
+        renderType: Text.NativeRendering
+      }
+      FontMetrics {
+        id: barMetrics
+        font: barLabel.font
+      }
+    }
+
+    // Context fill under the logo: grows with the tokens in use, coloured by level.
     Rectangle {
       visible: root.contextFraction >= 0 && !(root.bar && root.bar.vertical)
       anchors.bottom: parent.bottom

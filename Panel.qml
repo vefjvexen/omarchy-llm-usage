@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import qs.Commons
 import qs.Commons as Commons
@@ -32,7 +33,7 @@ Panel {
     if (!value) return ""
     return t("ctx", [value >= 1024 ? Math.round(value / 1024) + "k" : value])
   }
-  // Same green / yellow / orange / red levels as the bar chip.
+  // Same green / yellow / orange / red levels as the bar logo.
   function levelColor(fraction) {
     return root.hostWidget && root.hostWidget.levelColor ? root.hostWidget.levelColor(fraction) : Commons.Color.accent
   }
@@ -235,12 +236,36 @@ Panel {
                 }
               }
               iconComponent: Component {
-                Text {
-                  textFormat: Text.PlainText
-                  text: "󰘚"
-                  color: root.stats.active ? Commons.Color.accent : root.dim
-                  font.family: root.font
-                  font.pixelSize: Style.font.display
+                // The runtime's logo, as in the bar (BarWidget picks which one),
+                // painted in the accent while a model is loaded, dim otherwise.
+                Item {
+                  // Logo size in the panel header, as in the old mod: larger than the other header glyphs.
+                  implicitWidth: Style.font.displayLarge + Style.space(8)
+                  implicitHeight: Style.font.displayLarge + Style.space(8)
+                  Image {
+                    id: heroLogo
+                    anchors.fill: parent
+                    source: root.hostWidget ? root.hostWidget.logoSource : ""
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.width: Math.round(width * Screen.devicePixelRatio)
+                    sourceSize.height: Math.round(height * Screen.devicePixelRatio)
+                    smooth: true
+                    mipmap: true
+                    // Hidden, kept as a texture for the mask below.
+                    visible: false
+                    layer.enabled: true
+                  }
+                  Rectangle {
+                    anchors.fill: parent
+                    color: root.stats.active ? Commons.Color.accent : root.dim
+                    layer.enabled: true
+                    layer.effect: MultiEffect {
+                      maskEnabled: true
+                      maskSource: heroLogo
+                      maskThresholdMin: 0.5
+                      maskSpreadAtMin: 1.0
+                    }
+                  }
                 }
               }
             }
