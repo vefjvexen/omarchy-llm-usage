@@ -593,17 +593,23 @@ Panel {
                 }
                 // The two buffers that fill while you work: the context (whole conversation)
                 // and the reply being generated. Memory is the KV cache those tokens occupy.
+                // Ollama reports no token usage, only the context it reserved at load: there the
+                // row shows that reserved size in GiB, in a darker accent, with no note or fill bar.
                 LegendRow {
                   readonly property var p: root.stats.primary || ({})
+                  readonly property bool ollama: p.runtime === "Ollama"
                   readonly property real filled: p.context ? (p.context_used || 0) / p.context : 0
-                  visible: !!p.context && p.context_used !== null && p.context_used !== undefined
-                  swatch: root.levelColor(filled)
+                  visible: ollama ? !!p.context_memory
+                    : !!p.context && p.context_used !== null && p.context_used !== undefined
+                  swatch: ollama ? Qt.darker(Commons.Color.accent, 1.6) : root.levelColor(filled)
                   name: root.t("contextBuffer")
-                  amount: p.context_memory
+                  amount: ollama ? root.gib(p.context_memory) + " GiB"
+                    : p.context_memory
                     ? root.t("approxOf", [root.mib(p.context_memory * filled), root.mib(p.context_memory)])
                     : Math.round(filled * 100) + "%"
-                  note: root.t("tokensPct", [root.tokens(p.context_used), root.tokens(p.context), Math.round(filled * 100)])
-                  fraction: filled
+                  note: ollama ? ""
+                    : root.t("tokensPct", [root.tokens(p.context_used), root.tokens(p.context), Math.round(filled * 100)])
+                  fraction: ollama ? -1 : filled
                 }
                 LegendRow {
                   readonly property var p: root.stats.primary || ({})

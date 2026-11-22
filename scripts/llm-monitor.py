@@ -85,14 +85,17 @@ class _DeadlineSocket:
         return io.BufferedReader(self.reader)
 
 
-def http_get(port, path, timeout=0.6):
-    """Body of a local GET, or None when it fails, exceeds HTTP_LIMIT or HTTP_DEADLINE."""
+def http_get(port, path, timeout=0.6, post=None):
+    """Body of a local GET (POST with a JSON `post`), or None when it fails, exceeds HTTP_LIMIT or HTTP_DEADLINE."""
     deadline = time.monotonic() + HTTP_DEADLINE
+    method = "GET" if post is None else "POST"
+    payload = b"" if post is None else json.dumps(post).encode()
+    extra = "" if post is None else f"Content-Type: application/json\r\nContent-Length: {len(payload)}\r\n"
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=timeout) as sock:
-            sock.sendall(f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
-                         "Accept: application/json, text/plain\r\nConnection: close\r\n\r\n".encode())
-            response = http.client.HTTPResponse(_DeadlineSocket(sock, deadline, timeout), method="GET")
+            sock.sendall(f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n{extra}"
+                         "Accept: application/json, text/plain\r\nConnection: close\r\n\r\n".encode() + payload)
+            response = http.client.HTTPResponse(_DeadlineSocket(sock, deadline, timeout), method=method)
             try:
                 response.begin()
                 if not 200 <= response.status < 300:
@@ -123,10 +126,10 @@ def _finite_float(text):
     return value
 
 
-def http_json(port, path, timeout=0.6):
-    """Parsed JSON of a local GET; replies with NaN, Infinity or a number that
-    overflows (1e999) count as no reply."""
-    body = http_get(port, path, timeout)
+def http_json(port, path, timeout=0.6, post=None):
+    """Parsed JSON of a local GET (POST with a JSON `post`); replies with NaN, Infinity
+    or a number that overflows (1e999) count as no reply."""
+    body = http_get(port, path, timeout, post)
     try:
         return json.loads(body, parse_constant=_no_constant, parse_float=_finite_float) if body is not None else None
     except (ValueError, RecursionError):
@@ -945,11 +948,65 @@ def server_for(processes, args):
     return None
 
 
+_ollama_kv = {}
+
+
+def ollama_kv_bytes(name, digest, context):
+    """Bytes of KV cache Ollama allocates for `name` at `context` tokens (f16), or None.
+
+    Ollama's runner belongs to another user, so its VRAM buffers cannot be read
+    from /proc. The cache is allocated in full when the model loads, and its
+    size follows from the architecture in /api/show: only the attention layers
+    keep per-token K and V (recurrent/SSM layers of hybrid models keep a small
+    constant state), each of `head_count_kv` x `key_length`/`value_length`.
+    Quantised caches (OLLAMA_KV_CACHE_TYPE) make this an upper bound.
+    """
+    if not name or not context:
+        return None
+    key = (name, digest, context)
+    if key not in _ollama_kv:
+        # timeout and post positionally: tests stub http_json with positional-only lambdas
+        info = (http_json(PORTS["ollama"], "/api/show", 0.6, {"model": name}) or {}).get("model_info")
+        value = None
+        if isinstance(info, dict):
+            arch = info.get("general.architecture")
+            def num(field, default=None):
+                found = info.get(f"{arch}.{field}", default)
+                if isinstance(found, list):
+                    found = found[0] if found else default
+                return found if isinstance(found, (int, float)) and not isinstance(found, bool) else default
+            blocks = num("block_count")
+            heads = num("attention.head_count")
+            kv_heads = num("attention.head_count_kv", heads)
+            if isinstance(info.get(f"{arch}.attention.head_count_kv"), list):  # per-layer counts
+                counts = info[f"{arch}.attention.head_count_kv"]
+                layers_heads = sum(c for c in counts if isinstance(c, (int, float)) and not isinstance(c, bool))
+            else:
+                layers_heads = None
+            recurrent = info.get(f"{arch}.attention.recurrent_layers")
+            embedding = num("embedding_length")
+            key_len = num("attention.key_length", embedding // heads if embedding and heads else None)
+            value_len = num("attention.value_length", key_len)
+            if blocks and kv_heads and key_len and value_len:
+                if layers_heads is None:
+                    attn = blocks - (sum(1 for r in recurrent if r) if isinstance(recurrent, list) else 0)
+                    layers_heads = attn * kv_heads
+                value = quantity(layers_heads * context * (key_len + value_len) * 2)
+        remember(_ollama_kv, key, value)
+    return _ollama_kv[key]
+
+
 def ollama_models():
     data = http_json(PORTS["ollama"], "/api/ps")
-    return [{"name": clean(str(row.get("name") or "").removesuffix(":latest")), "state": "loaded",
-             "context": quantity(row.get("context_length")), "vram": quantity(row.get("size_vram"))}
-            for row in listed(data, "models")[:MAX_MODELS]]
+    models = []
+    for row in listed(data, "models")[:MAX_MODELS]:
+        name, context = str(row.get("name") or ""), quantity(row.get("context_length"))
+        vram = quantity(row.get("size_vram"))
+        kv = ollama_kv_bytes(name, str(row.get("digest") or ""), context) if vram else None
+        models.append({"name": clean(name.removesuffix(":latest")), "state": "loaded", "context": context,
+                       "vram": vram, "size": quantity(row.get("size")),
+                       "context_memory": min(kv, vram) if kv else None})
+    return models
 
 
 def lmstudio_models(processes):
@@ -1175,6 +1232,14 @@ def snapshot():
                 models = lmstudio_models(processes)
         except Exception:  # a reply of an unexpected shape: no model details this time
             models = []
+        if runtime == "ollama":
+            # Ollama's runner usually runs as its own user, so /proc/<pid>/fd is closed
+            # to us. /api/ps reports what the runner put on the GPU (size_vram) and what
+            # the whole model needs (size); the difference sits in system RAM.
+            api_vram = sum(int(model.get("vram") or 0) for model in models)
+            api_size = sum(int(model.get("size") or 0) for model in models)
+            if api_vram > vram:
+                vram, requested = api_vram, max(requested, api_size)
         runtimes.append({"id": runtime, "name": NAMES[runtime], "running": bool(processes),
                          "installed": bool(processes) or installed.get(runtime, True),
                          "processes": len(processes), "cpu": cpu if elapsed else None,
